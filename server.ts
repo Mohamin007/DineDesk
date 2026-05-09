@@ -47,6 +47,7 @@ const getGroq = () => {
 
 async function createApp() {
   const app = express();
+  const isServerlessRuntime = !!process.env.VERCEL || !!process.env.VERCEL_ENV;
 
   app.use(cors());
   app.use(express.json());
@@ -797,14 +798,14 @@ async function createApp() {
   });
 
 
-  // Vite middleware for development
-  if (process.env.NODE_ENV !== "production") {
+  // Vite middleware for local development only (never initialize inside serverless functions)
+  if (!isServerlessRuntime && process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
     app.use(vite.middlewares);
-  } else {
+  } else if (!isServerlessRuntime) {
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
     app.get("*", (req, res) => {
