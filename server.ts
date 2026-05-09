@@ -45,9 +45,8 @@ const getGroq = () => {
   return groqInstance;
 };
 
-async function startServer() {
+async function createApp() {
   const app = express();
-  const PORT = 3000;
 
   app.use(cors());
   app.use(express.json());
@@ -813,9 +812,35 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`DineDesk Server running on http://localhost:${PORT}`);
-  });
+  return app;
 }
 
-startServer();
+let appInstancePromise: Promise<express.Express> | null = null;
+
+const getAppInstance = () => {
+  if (!appInstancePromise) {
+    appInstancePromise = createApp();
+  }
+  return appInstancePromise;
+};
+
+// Vercel serverless entrypoint
+export default async function handler(req: any, res: any) {
+  const app = await getAppInstance();
+  return (app as any)(req, res);
+}
+
+// Local development/runtime entrypoint
+if (!process.env.VERCEL) {
+  const PORT = Number(process.env.PORT || 3000);
+  getAppInstance()
+    .then((app) => {
+      app.listen(PORT, "0.0.0.0", () => {
+        console.log(`DineDesk Server running on http://localhost:${PORT}`);
+      });
+    })
+    .catch((error) => {
+      console.error("Failed to start DineDesk server", error);
+      process.exit(1);
+    });
+}
