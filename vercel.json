@@ -8,30 +8,18 @@
       "runtime": "nodejs20.x"
     }
   },
-  "rewrites": [
+  "routes": [
     {
-      "source": "/api/health",
-      "destination": "/api/health.ts"
+      "src": "^/api(/.*)?$",
+      "dest": "/api/$1",
+      "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
     },
     {
-      "source": "/api/analyze",
-      "destination": "/api/analyze.ts"
+      "handle": "filesystem"
     },
     {
-      "source": "/api/ai/:module",
-      "destination": "/api/ai/:module.ts"
-    },
-    {
-      "source": "/api/exa/search",
-      "destination": "/api/exa/search.ts"
-    },
-    {
-      "source": "/api/:path*",
-      "destination": "/api/[...path].ts"
-    },
-    {
-      "source": "/:path*",
-      "destination": "/index.html"
+      "src": "^/((?!api).)*$",
+      "dest": "/index.html"
     }
   ]
 }
