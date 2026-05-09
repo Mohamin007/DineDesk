@@ -761,18 +761,37 @@ async function startServer() {
       const apiKey = process.env.EXA_API_KEY;
       if (!apiKey) return res.status(401).json({ error: "EXA_API_KEY Missing" });
 
-      const response = await fetch("https://api.exa.ai/search", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-api-key": apiKey },
-        body: JSON.stringify({ 
-          query, 
-          useAutoprompt: true, 
-          numResults: 5,
-          category: category || "company"
-        })
-      });
-      const data = await response.json();
-      res.json(data);
+      // Use an AbortController to bound Exa requests so they can't hang the server
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+
+      try {
+        const response = await fetch("https://api.exa.ai/search", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-api-key": apiKey },
+          body: JSON.stringify({ 
+            query, 
+            useAutoprompt: true, 
+            numResults: 5,
+            category: category || "company"
+          }),
+          signal: controller.signal
+        });
+
+        const text = await response.text();
+        let data: any = {};
+        try { data = JSON.parse(text); } catch (e) { data = { raw: text }; }
+
+        if (!response.ok) {
+          console.error('[exa] upstream error', { status: response.status, body: data });
+          return res.status(502).json({ error: 'Exa upstream error', status: response.status, body: data });
+        }
+
+        // Return structured data and include upstream meta for debugging
+        return res.json({ ...(data || {}), _meta: { upstreamStatus: response.status } });
+      } finally {
+        clearTimeout(timeout);
+      }
     } catch (error) {
       res.status(500).json({ error: "Exa Proxy Error" });
     }
