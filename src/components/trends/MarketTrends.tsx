@@ -25,6 +25,63 @@ import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/lib/utils';
 import { aiService, MarketIntelligence } from '@/services/aiService';
 
+const EMPTY_INTELLIGENCE: MarketIntelligence = {
+  neuralHighlights: [],
+  foodTrends: [],
+  digitalIntelligence: [],
+  digitalExperience: [],
+  customerPsychology: [],
+  marketPositioning: [],
+  strategicActions: [],
+  confidenceScore: 0,
+};
+
+const normalizeMarketIntelligence = (payload: any): MarketIntelligence => ({
+  neuralHighlights: Array.isArray(payload?.neuralHighlights) ? payload.neuralHighlights.filter((item: any) => typeof item === 'string') : [],
+  foodTrends: Array.isArray(payload?.foodTrends)
+    ? payload.foodTrends.filter(Boolean).map((trend: any) => ({
+        title: String(trend?.title || 'Trend'),
+        description: String(trend?.description || ''),
+        momentum: trend?.momentum === 'high' || trend?.momentum === 'medium' || trend?.momentum === 'low' ? trend.momentum : 'low',
+      }))
+    : [],
+  digitalIntelligence: Array.isArray(payload?.digitalIntelligence)
+    ? payload.digitalIntelligence.filter(Boolean).map((item: any) => ({
+        title: String(item?.title || 'Digital Signal'),
+        platform: String(item?.platform || 'Unknown'),
+        insight: String(item?.insight || ''),
+      }))
+    : [],
+  digitalExperience: Array.isArray(payload?.digitalExperience)
+    ? payload.digitalExperience.filter(Boolean).map((item: any) => ({
+        feature: String(item?.feature || 'Digital Feature'),
+        impact: String(item?.impact || ''),
+        recommendation: String(item?.recommendation || ''),
+      }))
+    : [],
+  customerPsychology: Array.isArray(payload?.customerPsychology)
+    ? payload.customerPsychology.filter(Boolean).map((item: any) => ({
+        title: String(item?.title || 'Customer Signal'),
+        description: String(item?.description || ''),
+        segment: String(item?.segment || 'Audience'),
+      }))
+    : [],
+  marketPositioning: Array.isArray(payload?.marketPositioning)
+    ? payload.marketPositioning.filter(Boolean).map((item: any) => ({
+        title: String(item?.title || 'Positioning Insight'),
+        description: String(item?.description || ''),
+      }))
+    : [],
+  strategicActions: Array.isArray(payload?.strategicActions)
+    ? payload.strategicActions.filter(Boolean).map((item: any) => ({
+        action: String(item?.action || 'Strategic Action'),
+        impact: String(item?.impact || 'Medium'),
+        target: String(item?.target || 'Growth'),
+      }))
+    : [],
+  confidenceScore: Number.isFinite(Number(payload?.confidenceScore)) ? Number(payload.confidenceScore) : 0,
+});
+
 const SectionHeader = ({ icon: Icon, title, subtitle }: { icon: any, title: string, subtitle: string }) => (
   <div className="flex items-center gap-4 mb-8">
     <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 dark:bg-indigo-500/20 flex items-center justify-center text-indigo-500 border border-indigo-500/20">
@@ -67,12 +124,14 @@ const IntelligenceGrid = ({ children }: { children: React.ReactNode }) => (
   </div>
 );
 
-export const MarketTrends = () => {
+const MarketTrendsView = () => {
   const [intel, setIntel] = useState<MarketIntelligence | null>(null);
   const [loading, setLoading] = useState(false);
   const [scanStep, setScanStep] = useState(0);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchIntelligence = async (force: boolean = false) => {
+    setError(null);
     setLoading(true);
     if (force || !intel) {
       setScanStep(0);
@@ -88,9 +147,11 @@ export const MarketTrends = () => {
 
     try {
       const data = await aiService.getTrends("Local Area", force);
-      setIntel(data);
+      setIntel(normalizeMarketIntelligence(data));
     } catch (e) {
       console.error(e);
+      setError('Market intelligence could not be loaded right now. You can retry the scan safely.');
+      setIntel(null);
     } finally {
       setLoading(false);
     }
@@ -99,15 +160,23 @@ export const MarketTrends = () => {
   useEffect(() => {
     // Only fetch if we don't have intel already
     const checkCache = async () => {
-      const existing = await aiService.getTrends();
-      if (existing.neuralHighlights && existing.neuralHighlights.length > 0) {
-        setIntel(existing);
-      } else {
-        fetchIntelligence(false);
+      try {
+        const existing = normalizeMarketIntelligence(await aiService.getTrends());
+        if (existing.neuralHighlights.length > 0) {
+          setIntel(existing);
+        } else {
+          await fetchIntelligence(false);
+        }
+      } catch (e) {
+        console.error(e);
+        setError('Market intelligence failed to initialize. Retry the scan to continue.');
+        setIntel(null);
       }
     };
     checkCache();
   }, []);
+
+  const safeIntel = intel ? normalizeMarketIntelligence(intel) : null;
 
   const loadingSteps = [
     "Initializing Exa Search Proxy",
@@ -200,13 +269,25 @@ export const MarketTrends = () => {
               </div>
             </div>
           </motion.div>
-        ) : intel ? (
+        ) : safeIntel ? (
           <motion.div 
             key="intel"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="space-y-24"
           >
+            {error && (
+              <div className="rounded-[2rem] border border-rose-500/20 bg-rose-500/10 px-6 py-4 text-sm text-rose-700 dark:text-rose-300 flex items-center justify-between gap-4">
+                <span>{error}</span>
+                <button
+                  onClick={() => fetchIntelligence(true)}
+                  className="px-4 py-2 rounded-full bg-rose-500 text-white text-[10px] font-black uppercase tracking-widest"
+                >
+                  Retry Scan
+                </button>
+              </div>
+            )}
+
             {/* Neural Highlights Marquee-style */}
             <div className="p-8 rounded-[3rem] bg-indigo-600 text-white shadow-2xl relative overflow-hidden">
               <div className="absolute top-0 right-0 p-12 opacity-10">
@@ -219,7 +300,7 @@ export const MarketTrends = () => {
                     <h3 className="text-3xl font-black tracking-tighter uppercase">Neural Scan Highlights</h3>
                   </div>
                   <div className="space-y-6">
-                    {intel.neuralHighlights.map((highlight, i) => (
+                    {safeIntel.neuralHighlights.map((highlight, i) => (
                       <motion.div 
                         key={i}
                         initial={{ opacity: 0, x: -20 }}
@@ -236,7 +317,7 @@ export const MarketTrends = () => {
                 <div className="bg-white/10 backdrop-blur-xl rounded-[2.5rem] p-10 border border-white/10 flex flex-col justify-between min-h-[300px]">
                   <div className="space-y-1">
                     <p className="text-[10px] font-black uppercase tracking-widest opacity-60">Intelligence Confidence</p>
-                    <h4 className="text-7xl font-black tracking-tighter">{intel.confidenceScore}%</h4>
+                    <h4 className="text-7xl font-black tracking-tighter">{safeIntel.confidenceScore}%</h4>
                   </div>
                   <div className="space-y-4">
                     <div className="flex justify-between items-center text-xs font-bold uppercase tracking-widest">
@@ -246,7 +327,7 @@ export const MarketTrends = () => {
                     <div className="h-3 w-full bg-white/10 rounded-full overflow-hidden">
                       <motion.div 
                         initial={{ width: 0 }}
-                        animate={{ width: `${intel.confidenceScore}%` }}
+                        animate={{ width: `${safeIntel.confidenceScore}%` }}
                         transition={{ duration: 1.5, ease: "circOut" }}
                         className="h-full bg-gradient-to-r from-yellow-400 to-orange-500 shadow-[0_0_20px_rgba(234,179,8,0.5)]"
                       />
@@ -264,7 +345,7 @@ export const MarketTrends = () => {
                 subtitle="Viral concepts & trending ingredients" 
               />
               <IntelligenceGrid>
-                {intel.foodTrends.map((trend, i) => (
+                {safeIntel.foodTrends.map((trend, i) => (
                   <TrendCard key={i} {...trend} idx={i} />
                 ))}
               </IntelligenceGrid>
@@ -278,7 +359,7 @@ export const MarketTrends = () => {
                 subtitle="Website ROI & customer engagement trends" 
               />
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                 {intel.digitalExperience.map((exp, i) => (
+                 {safeIntel.digitalExperience.map((exp, i) => (
                    <motion.div 
                      key={i}
                      initial={{ opacity: 0, scale: 0.9 }}
@@ -309,7 +390,7 @@ export const MarketTrends = () => {
                 subtitle="Short-form content & engagement tactics" 
               />
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                {intel.digitalIntelligence.map((item, i) => (
+                {safeIntel.digitalIntelligence.map((item, i) => (
                   <motion.div 
                     key={i}
                     initial={{ opacity: 0, x: i % 2 === 0 ? -20 : 20 }}
@@ -344,7 +425,7 @@ export const MarketTrends = () => {
                 subtitle="Gen Z behavior & aesthetic preferences" 
               />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {intel.customerPsychology.map((item, i) => (
+                {safeIntel.customerPsychology.map((item, i) => (
                   <div key={i} className="p-8 rounded-[2.5rem] bg-orange-500/5 dark:bg-orange-500/10 border border-orange-500/10 flex gap-6 group hover:bg-orange-500/10 transition-all">
                     <div className="w-16 h-16 rounded-2xl bg-orange-500 text-white flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
                       <Users className="w-8 h-8" />
@@ -371,7 +452,7 @@ export const MarketTrends = () => {
                 subtitle="Competitor gaps & premium opportunities" 
               />
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {intel.marketPositioning.map((item, i) => (
+                {safeIntel.marketPositioning.map((item, i) => (
                   <div key={i} className="p-8 rounded-[2rem] bg-zinc-50 dark:bg-zinc-800/20 border border-black/5 dark:border-white/5 flex flex-col justify-between group">
                     <div className="space-y-4">
                       <div className="w-10 h-10 rounded-xl bg-black dark:bg-white text-white dark:text-black flex items-center justify-center group-hover:rotate-12 transition-transform">
@@ -407,7 +488,7 @@ export const MarketTrends = () => {
                   </div>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                     {intel.strategicActions.map((action, i) => (
+                     {safeIntel.strategicActions.map((action, i) => (
                         <motion.div 
                           key={i}
                           initial={{ opacity: 0, y: 10 }}
@@ -438,7 +519,10 @@ export const MarketTrends = () => {
             </section>
           </motion.div>
         ) : (
-          <div className="min-h-[40vh] flex items-center justify-center">
+          <div className="min-h-[40vh] flex flex-col items-center justify-center gap-6 text-center">
+             <p className="max-w-lg text-sm text-zinc-500 dark:text-zinc-400">
+               {error || 'Market intelligence is ready to scan. Start a new scan to generate live trend analysis.'}
+             </p>
              <button onClick={() => fetchIntelligence(true)} className="px-10 py-5 rounded-3xl bg-indigo-600 text-white font-black uppercase tracking-widest shadow-2xl">
                Start Intelligence Scan
              </button>
@@ -448,3 +532,65 @@ export const MarketTrends = () => {
     </div>
   );
 };
+
+type MarketTrendsBoundaryState = {
+  hasError: boolean;
+  errorMessage: string;
+  resetKey: number;
+};
+
+export class MarketTrends extends React.Component<{}, MarketTrendsBoundaryState> {
+  state: MarketTrendsBoundaryState = {
+    hasError: false,
+    errorMessage: '',
+    resetKey: 0,
+  };
+
+  static getDerivedStateFromError(error: Error) {
+    return {
+      hasError: true,
+      errorMessage: error.message || 'Market Trends crashed while rendering.',
+    };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('MarketTrends render error:', error, errorInfo);
+  }
+
+  handleRetry = () => {
+    this.setState(prev => ({
+      hasError: false,
+      errorMessage: '',
+      resetKey: prev.resetKey + 1,
+    }));
+  };
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-[60vh] flex items-center justify-center px-8">
+          <div className="max-w-xl w-full rounded-[3rem] border border-rose-500/20 bg-white dark:bg-zinc-950 shadow-2xl p-10 text-center space-y-6">
+            <div className="w-16 h-16 rounded-2xl bg-rose-500/10 text-rose-500 flex items-center justify-center mx-auto">
+              <ShieldCheck className="w-8 h-8" />
+            </div>
+            <div className="space-y-3">
+              <h3 className="text-2xl font-black text-zinc-900 dark:text-white uppercase tracking-tight">Market Trends paused</h3>
+              <p className="text-sm text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                The intelligence view encountered a rendering issue, but the rest of the dashboard remains stable.
+              </p>
+              <p className="text-xs font-mono text-rose-500 break-words">{this.state.errorMessage}</p>
+            </div>
+            <button
+              onClick={this.handleRetry}
+              className="px-8 py-4 rounded-3xl bg-rose-500 text-white font-black uppercase tracking-widest text-xs shadow-xl"
+            >
+              Retry Market Trends
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return <MarketTrendsView key={this.state.resetKey} />;
+  }
+}

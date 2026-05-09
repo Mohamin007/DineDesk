@@ -398,7 +398,7 @@ export const AnalyzeRestaurant = ({ onFinishAnalysis }: { onFinishAnalysis: () =
                     value={data.challenges}
                     onChange={e => updateData({ challenges: e.target.value })}
                     placeholder="What keeps you up at night? e.g. Customer acquisition in a crowded market, rising ingredient costs..."
-                    className="w-full h-32 bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5 rounded-3xl p-6 text-sm font-medium focus:border-orange-500/50 outline-none transition-all resize-none"
+                    className="w-full h-32 bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5 rounded-3xl p-6 text-sm font-medium text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 caret-orange-500 focus:border-orange-500/50 outline-none transition-all resize-none"
                    />
                 </div>
                 <div className="space-y-4">
@@ -407,7 +407,7 @@ export const AnalyzeRestaurant = ({ onFinishAnalysis }: { onFinishAnalysis: () =
                     value={data.goals}
                     onChange={e => updateData({ goals: e.target.value })}
                     placeholder="What does success look like? e.g. Opening a second location, becoming a local Instagram destination..."
-                    className="w-full h-32 bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5 rounded-3xl p-6 text-sm font-medium focus:border-orange-500/50 outline-none transition-all resize-none"
+                    className="w-full h-32 bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5 rounded-3xl p-6 text-sm font-medium text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 caret-orange-500 focus:border-orange-500/50 outline-none transition-all resize-none"
                    />
                 </div>
               </div>
@@ -458,6 +458,12 @@ export const AnalyzeRestaurant = ({ onFinishAnalysis }: { onFinishAnalysis: () =
               animate={{ opacity: 1, y: 0 }}
               className="w-full space-y-24 py-12"
             >
+              {report?.error && (
+                <div className="rounded-3xl border border-amber-500/20 bg-amber-500/10 px-6 py-4 text-sm text-amber-700 dark:text-amber-300">
+                  {report.error}
+                </div>
+              )}
+
               {/* Report Header */}
               <div className="flex flex-col md:flex-row justify-between items-center md:items-end gap-12 border-b border-black/[0.03] dark:border-white/[0.03] pb-12">
                 <div className="space-y-6 text-center md:text-left">

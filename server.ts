@@ -3,30 +3,38 @@ import { createServer as createViteServer } from "vite";
 import path from "path";
 import cors from "cors";
 import dotenv from "dotenv";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import Groq from "groq-sdk";
 
-dotenv.config();
+dotenv.config({ path: path.resolve(process.cwd(), ".env"), override: true });
 
-// Initialize AI Clients Lazily
-let genAIInstance: any = null;
-const getGenAI = () => {
-  if (!genAIInstance) {
-    const key = process.env.GEMINI_API_KEY;
-    if (!key) {
-      console.warn("GEMINI_API_KEY is missing - AI fallback will be disabled");
-      throw new Error("GEMINI_API_KEY is missing");
-    }
-    console.log("Configuring Gemini Engine...");
-    genAIInstance = new GoogleGenerativeAI(key);
+const migrateLegacyEnv = (name: string) => {
+  const legacyName = `VITE_${name}`;
+  if (!process.env[name] && process.env[legacyName]) {
+    process.env[name] = process.env[legacyName];
+    console.warn(`[env] Migrated ${legacyName} -> ${name}`);
   }
-  return genAIInstance;
 };
+
+["GROQ_API_KEY", "EXA_API_KEY"].forEach(migrateLegacyEnv);
+
+console.log("Groq key exists:", !!process.env.GROQ_API_KEY);
+console.log("Exa key exists:", !!process.env.EXA_API_KEY);
+
+const requireServerEnv = (name: string) => {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(`${name} is missing`);
+  }
+  return value;
+};
+
+// Simple in-memory cache for last successful AI responses per module
+const aiCache: Record<string, any> = {};
 
 let groqInstance: any = null;
 const getGroq = () => {
   if (!groqInstance) {
-    const key = process.env.GROQ_API_KEY;
+    const key = requireServerEnv("GROQ_API_KEY");
     if (!key) {
       console.warn("GROQ_API_KEY is missing - AI primary engine will be disabled");
       throw new Error("GROQ_API_KEY is missing");
@@ -640,32 +648,53 @@ async function startServer() {
 
       const responseContent = completion.choices[0]?.message?.content || "";
       let parsedResult = isJson ? JSON.parse(responseContent) : { message: responseContent };
-      
+
       // Defensive defaults
       if (module === 'insights' && !parsedResult.insights) parsedResult.insights = [];
       if (module === 'trends' && !parsedResult.trends) parsedResult.trends = [];
-      
+
+      // Cache last successful result for this module
+      try { aiCache[module] = parsedResult; } catch (e) { /* noop */ }
+
       res.json(parsedResult);
 
     } catch (error: any) {
       console.error(`AI ${module} Error:`, error);
-      
-      // Fallback to Gemini if Groq fails and it's a critical request
+
+      // Determine retry-after if provided by Groq response headers
+      let retryAfterSeconds: number | null = null;
       try {
-        console.log(`Attempting Gemini fallback for ${module}...`);
-        const genAI = getGenAI();
-        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-        const lastMsg = messages?.[messages.length - 1]?.content || "Analyze and respond.";
-        const result = await model.generateContent(lastMsg);
-        const text = result.response.text();
-        res.json({ message: text, error: "Primary engine unavailable, using fallback." });
-      } catch (fallbackError) {
-        res.status(500).json({ 
-          error: "All AI engines failed",
-          insights: [],
-          trends: []
+        if (error?.headers) {
+          // groq-sdk error.headers may be a Headers-like object or plain object
+          if (typeof error.headers.get === 'function') {
+            const ra = error.headers.get('retry-after');
+            retryAfterSeconds = ra ? parseInt(ra, 10) : null;
+          } else if (error.headers['retry-after']) {
+            retryAfterSeconds = parseInt(error.headers['retry-after'], 10) || null;
+          }
+        }
+      } catch (e) { /* ignore parsing issues */ }
+
+      // If we have a cached response for this module, return it as a friendly fallback
+      const cached = aiCache[module] || null;
+      if (cached) {
+        console.warn(`[ai] Returning cached response for module=${module}`);
+        return res.json({
+          ...cached,
+          _meta: {
+            warning: 'Primary AI engine unavailable; returning cached results.',
+            retryAfterSeconds: retryAfterSeconds
+          }
         });
       }
+
+      // No cached result: return graceful service-unavailable response
+      return res.status(503).json({
+        error: 'AI engine temporarily busy',
+        message: 'AI engine temporarily busy. Please retry in a few seconds.',
+        retryAfterSeconds: retryAfterSeconds,
+        cached: null
+      });
     }
   });
 
@@ -691,24 +720,37 @@ async function startServer() {
       });
       
       res.json(JSON.parse(completion.choices[0]?.message?.content || "{}"));
-    } catch (error) {
+    } catch (error: any) {
       console.error("Analysis Error:", error);
-      
-      // Fallback to Gemini
+
+      // Determine retry-after if provided by Groq response headers
+      let retryAfterSeconds: number | null = null;
       try {
-        console.log("Attempting Gemini fallback for analysis...");
-        const genAI = getGenAI();
-        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-        const prompt = `Analyze this restaurant data and return a JSON report: ${JSON.stringify(req.body.restaurantData)}. 
-        JSON structure: { efficiencyScore, wasteRiskScore, retentionScore, growthPotentialScore, keyInsights: [], revenueOpportunities: [], menuSuggestions: [], demandForecast: "", competitorAnalysis: "" }`;
-        const result = await model.generateContent(prompt);
-        const text = result.response.text();
-        // Clean up markdown if present
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        res.json(JSON.parse(jsonMatch ? jsonMatch[0] : text));
-      } catch (fallbackError) {
-        res.status(500).json({ error: "Analysis failed on all engines" });
+        if (error?.headers) {
+          if (typeof error.headers.get === 'function') {
+            const ra = error.headers.get('retry-after');
+            retryAfterSeconds = ra ? parseInt(ra, 10) : null;
+          } else if (error.headers['retry-after']) {
+            retryAfterSeconds = parseInt(error.headers['retry-after'], 10) || null;
+          }
+        }
+      } catch (e) { }
+
+      const cached = aiCache['analyze'] || null;
+      if (cached) {
+        console.warn('[ai] Returning cached analysis fallback');
+        return res.json({
+          ...cached,
+          _meta: { warning: 'Primary AI engine unavailable; returning cached results.', retryAfterSeconds }
+        });
       }
+
+      return res.status(503).json({
+        error: 'AI engine temporarily busy',
+        message: 'Analysis service temporarily busy. Please retry in a few seconds.',
+        retryAfterSeconds,
+        cached: null
+      });
     }
   });
 
