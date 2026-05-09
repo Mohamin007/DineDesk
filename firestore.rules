@@ -1,0 +1,85 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helper Functions ---
+    
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Validation Helpers ---
+
+    function isValidMenuItem(data) {
+      let required = ['name', 'category', 'price', 'cost', 'popularity', 'ingredients', 'stockLevel'];
+      return data.keys().hasAll(required)
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 100
+        && data.category is string && data.category.size() > 0 && data.category.size() <= 50
+        && (data.price is number || data.price is int) && data.price >= 0
+        && (data.cost is number || data.cost is int) && data.cost >= 0
+        && data.popularity in ['High', 'Medium', 'Low']
+        && data.ingredients is list && data.ingredients.size() <= 50
+        && (data.stockLevel is number || data.stockLevel is int) && data.stockLevel >= 0;
+    }
+
+    function isValidInventoryItem(data) {
+      let required = ['name', 'quantity', 'unit', 'reorderPoint', 'status'];
+      return data.keys().hasAll(required)
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 100
+        && (data.quantity is number || data.quantity is int) && data.quantity >= 0
+        && data.unit is string && data.unit.size() > 0 && data.unit.size() <= 20
+        && (data.reorderPoint is number || data.reorderPoint is int) && data.reorderPoint >= 0
+        && data.status in ['Healthy', 'Low', 'Critical'];
+    }
+
+    // --- Collection Rules ---
+
+    match /users/{userId} {
+      // Basic ID validation for the path variable
+      allow get: if isOwner(userId) && isValidId(userId);
+
+      match /menu/{itemId} {
+        allow list: if isOwner(userId);
+        allow get: if isOwner(userId) && isValidId(itemId);
+        allow create: if isOwner(userId) && isValidId(itemId) && isValidMenuItem(incoming());
+        allow update: if isOwner(userId) && isValidId(itemId) && isValidMenuItem(incoming())
+          && (
+            // Full update or granular updates
+            incoming().diff(existing()).affectedKeys().hasAny(['name', 'category', 'price', 'cost', 'popularity', 'ingredients', 'stockLevel', 'description', 'prepTime', 'tags', 'image'])
+          );
+        allow delete: if isOwner(userId) && isValidId(itemId);
+      }
+
+      match /inventory/{itemId} {
+        allow list: if isOwner(userId);
+        allow get: if isOwner(userId) && isValidId(itemId);
+        allow create: if isOwner(userId) && isValidId(itemId) && isValidInventoryItem(incoming());
+        allow update: if isOwner(userId) && isValidId(itemId) && isValidInventoryItem(incoming())
+          && (
+            incoming().diff(existing()).affectedKeys().hasAny(['name', 'quantity', 'unit', 'reorderPoint', 'status', 'image'])
+          );
+        allow delete: if isOwner(userId) && isValidId(itemId);
+      }
+    }
+  }
+}

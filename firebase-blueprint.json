@@ -1,0 +1,47 @@
+{
+  "entities": {
+    "MenuItem": {
+      "title": "Menu Item",
+      "description": "A dish or item available on the restaurant's menu.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "The name of the menu item." },
+        "category": { "type": "string", "description": "The category (e.g., Burgers, Pizza)." },
+        "price": { "type": "number", "description": "The selling price." },
+        "cost": { "type": "number", "description": "The production cost." },
+        "popularity": { "type": "string", "enum": ["High", "Medium", "Low"], "description": "Popularity ranking." },
+        "ingredients": { "type": "array", "items": { "type": "string" }, "description": "List of ingredients." },
+        "stockLevel": { "type": "number", "description": "Current stock level." },
+        "description": { "type": "string", "description": "Description of the item." },
+        "prepTime": { "type": "string", "description": "Average preparation time (e.g., 12m)." },
+        "tags": { "type": "array", "items": { "type": "string" }, "description": "Search tags." },
+        "image": { "type": "string", "format": "uri", "description": "URL to the item's image." }
+      },
+      "required": ["name", "category", "price", "cost", "popularity", "ingredients", "stockLevel"]
+    },
+    "InventoryItem": {
+      "title": "Inventory Item",
+      "description": "A raw material or supply in the restaurant's inventory.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "The name of the inventory item." },
+        "quantity": { "type": "number", "description": "The current quantity in stock." },
+        "unit": { "type": "string", "description": "The unit of measurement (e.g., kg, pcs, L)." },
+        "reorderPoint": { "type": "number", "description": "The threshold for reordering." },
+        "status": { "type": "string", "enum": ["Healthy", "Low", "Critical"], "description": "Stock health status." },
+        "image": { "type": "string", "format": "uri", "description": "URL to the item's image." }
+      },
+      "required": ["name", "quantity", "unit", "reorderPoint", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/menu/{itemId}": {
+      "schema": "MenuItem",
+      "description": "Menu items belonging to a specific user/restaurant."
+    },
+    "/users/{userId}/inventory/{itemId}": {
+      "schema": "InventoryItem",
+      "description": "Inventory items belonging to a specific user/restaurant."
+    }
+  }
+}
