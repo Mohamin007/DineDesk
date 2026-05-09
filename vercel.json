@@ -4,16 +4,34 @@
   "outputDirectory": "dist",
   "functions": {
     "api/**/*.ts": {
-      "maxDuration": 60
+      "maxDuration": 60,
+      "runtime": "nodejs20.x"
     }
   },
-  "routes": [
+  "rewrites": [
     {
-      "handle": "filesystem"
+      "source": "/api/health",
+      "destination": "/api/health.ts"
     },
     {
-      "src": "/.*",
-      "dest": "/index.html"
+      "source": "/api/analyze",
+      "destination": "/api/analyze.ts"
+    },
+    {
+      "source": "/api/ai/:module",
+      "destination": "/api/ai/:module.ts"
+    },
+    {
+      "source": "/api/exa/search",
+      "destination": "/api/exa/search.ts"
+    },
+    {
+      "source": "/api/:path*",
+      "destination": "/api/[...path].ts"
+    },
+    {
+      "source": "/:path*",
+      "destination": "/index.html"
     }
   ]
 }

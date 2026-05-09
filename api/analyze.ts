@@ -1,14 +1,23 @@
-import cors from "cors";
 import { handleAnalyze } from "../lib/handlers";
 
 export default async function handler(req: any, res: any) {
-  // Enable CORS
-  cors()(req, res, () => {});
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
 
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const { restaurantData } = req.body;
+  let body = req.body;
+  if (typeof body === "string") {
+    try { body = JSON.parse(body); } catch (e) { }
+  }
+  
+  const { restaurantData } = body || {};
   await handleAnalyze(restaurantData, res);
 }

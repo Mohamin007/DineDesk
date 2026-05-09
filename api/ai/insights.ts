@@ -1,13 +1,23 @@
-import cors from "cors";
 import { handleAIRequest } from "../../lib/handlers";
 
 export default async function handler(req: any, res: any) {
-  cors()(req, res, () => {});
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
 
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const { context, messages } = req.body;
+  let body = req.body;
+  if (typeof body === "string") {
+    try { body = JSON.parse(body); } catch (e) { }
+  }
+  
+  const { context, messages } = body || {};
   await handleAIRequest("insights", context, messages, res);
 }
